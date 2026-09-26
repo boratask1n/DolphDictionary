@@ -1,0 +1,6 @@
+{
+  "name": "LexiLab - Sözlük & Sticky Reels",
+  "description": "Alfabetik sözlük, hızlı tam metin arama ve animasyonlu sticky note reelsi ile İngilizce ve Almanca öğrenme deneyimi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,305 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated user profile",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user",
+          "maxLength": 128
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar photo URL",
+          "maxLength": 1024
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account creation timestamp",
+          "maxLength": 64
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "Last login timestamp",
+          "maxLength": 64
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Word": {
+      "title": "Word",
+      "description": "Saved vocabulary entry with spaced repetition metadata",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique word identifier",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "word": {
+          "type": "string",
+          "description": "Target language word text",
+          "maxLength": 128
+        },
+        "language": {
+          "type": "string",
+          "description": "Language code (en or de)",
+          "enum": ["en", "de"]
+        },
+        "partOfSpeech": {
+          "type": "string",
+          "description": "Part of speech",
+          "maxLength": 32
+        },
+        "phoneticIpa": {
+          "type": "string",
+          "description": "Phonetic IPA pronunciation guide",
+          "maxLength": 128
+        },
+        "meanings": {
+          "type": "array",
+          "description": "List of definitions and meanings"
+        },
+        "examples": {
+          "type": "array",
+          "description": "Example sentences"
+        },
+        "primaryAcademicContext": {
+          "type": "string",
+          "description": "Domain or context category",
+          "maxLength": 128
+        },
+        "personalNote": {
+          "type": "string",
+          "description": "User custom personal notes",
+          "maxLength": 2048
+        },
+        "synonyms": {
+          "type": "array",
+          "description": "Synonyms list"
+        },
+        "antonyms": {
+          "type": "array",
+          "description": "Antonyms list"
+        },
+        "relatedWords": {
+          "type": "array",
+          "description": "Related expressions and collocations"
+        },
+        "wordFamily": {
+          "type": "array",
+          "description": "Word family members"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Categorical tags"
+        },
+        "difficultyRating": {
+          "type": "number",
+          "description": "Difficulty score from 1.0 to 10.0"
+        },
+        "difficultyLabel": {
+          "type": "string",
+          "description": "Difficulty label (Easy, Medium, Hard, Very Hard)",
+          "maxLength": 32
+        },
+        "learningStatus": {
+          "type": "string",
+          "description": "Learning status (new, learning, review, mastered, difficult)",
+          "maxLength": 32
+        },
+        "dateAdded": {
+          "type": "string",
+          "description": "ISO date added",
+          "maxLength": 64
+        },
+        "lastReviewed": {
+          "type": "string",
+          "description": "ISO date last reviewed",
+          "maxLength": 64
+        },
+        "nextReviewDate": {
+          "type": "string",
+          "description": "ISO date next review due",
+          "maxLength": 64
+        },
+        "reviewCount": {
+          "type": "number",
+          "description": "Total review sessions"
+        },
+        "correctCount": {
+          "type": "number",
+          "description": "Number of correct reviews"
+        },
+        "incorrectCount": {
+          "type": "number",
+          "description": "Number of forgotten reviews"
+        },
+        "stabilityDays": {
+          "type": "number",
+          "description": "FSRS stability in days"
+        },
+        "difficultyFactor": {
+          "type": "number",
+          "description": "Spaced repetition difficulty factor"
+        },
+        "lapses": {
+          "type": "number",
+          "description": "Forgotten count"
+        },
+        "streak": {
+          "type": "number",
+          "description": "Consecutive correct reviews"
+        }
+      },
+      "required": ["id", "userId", "word", "language", "partOfSpeech", "meanings", "dateAdded", "nextReviewDate"]
+    },
+    "ReviewLog": {
+      "title": "ReviewLog",
+      "description": "Spaced repetition review history log",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique log identifier",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "wordId": {
+          "type": "string",
+          "description": "Reviewed word identifier",
+          "maxLength": 128
+        },
+        "wordText": {
+          "type": "string",
+          "description": "Word text reviewed",
+          "maxLength": 128
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Review completion timestamp",
+          "maxLength": 64
+        },
+        "feedback": {
+          "type": "string",
+          "description": "User review feedback (forgot, difficult, remembered)",
+          "maxLength": 32
+        },
+        "previousIntervalDays": {
+          "type": "number",
+          "description": "Previous interval in days"
+        },
+        "newIntervalDays": {
+          "type": "number",
+          "description": "New calculated interval in days"
+        },
+        "previousDifficulty": {
+          "type": "number",
+          "description": "Previous difficulty rating"
+        },
+        "newDifficulty": {
+          "type": "number",
+          "description": "New difficulty rating"
+        },
+        "mode": {
+          "type": "string",
+          "description": "Review mode",
+          "maxLength": 32
+        }
+      },
+      "required": ["id", "userId", "wordId", "wordText", "timestamp", "feedback"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User configuration and preferences",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID",
+          "maxLength": 128
+        },
+        "nativeLanguage": {
+          "type": "string",
+          "description": "Native language",
+          "maxLength": 8
+        },
+        "targetLanguages": {
+          "type": "array",
+          "description": "Array of target languages"
+        },
+        "activeLanguage": {
+          "type": "string",
+          "description": "Currently active language",
+          "maxLength": 8
+        },
+        "dailyGoal": {
+          "type": "number",
+          "description": "Daily review target count"
+        },
+        "theme": {
+          "type": "string",
+          "description": "Theme mode",
+          "maxLength": 16
+        },
+        "pronunciationPreference": {
+          "type": "string",
+          "description": "Accent preference",
+          "maxLength": 8
+        },
+        "autoPlayAudio": {
+          "type": "boolean",
+          "description": "Auto play audio flag"
+        },
+        "keyboardShortcutsEnabled": {
+          "type": "boolean",
+          "description": "Keyboard shortcuts flag"
+        },
+        "cloudSyncEnabled": {
+          "type": "boolean",
+          "description": "Cloud synchronization flag"
+        }
+      },
+      "required": ["userId", "activeLanguage"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data and metadata"
+    },
+    "/users/{userId}/words/{wordId}": {
+      "schema": "Word",
+      "description": "Permanent personal vocabulary stored in Firestore"
+    },
+    "/users/{userId}/reviewLogs/{logId}": {
+      "schema": "ReviewLog",
+      "description": "Permanent spaced repetition review logs"
+    },
+    "/users/{userId}/settings/preferences": {
+      "schema": "UserSettings",
+      "description": "User personalized settings and preferences"
+    }
+  }
+}

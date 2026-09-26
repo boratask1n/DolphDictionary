@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="108" fill="#0f172a"/>
+  <circle cx="256" cy="256" r="180" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.25" stroke-dasharray="12 8"/>
+  <circle cx="340" cy="180" r="16" fill="#38bdf8" />
+  <circle cx="170" cy="190" r="10" fill="#818cf8" />
+  <circle cx="380" cy="270" r="8" fill="#c084fc" />
+  <line x1="170" y1="190" x2="256" y2="256" stroke="#818cf8" stroke-width="3" stroke-opacity="0.4"/>
+  <line x1="256" y1="256" x2="340" y2="180" stroke="#38bdf8" stroke-width="3" stroke-opacity="0.5"/>
+  <line x1="340" y1="180" x2="380" y2="270" stroke="#c084fc" stroke-width="3" stroke-opacity="0.4"/>
+  <!-- Book / Prism shape -->
+  <path d="M160 350C190 335 225 332 256 342C287 332 322 335 352 350V240C322 225 287 222 256 232C225 222 190 225 160 240Z" fill="#1e293b" stroke="#e2e8f0" stroke-width="8" stroke-linejoin="round"/>
+  <line x1="256" y1="232" x2="256" y2="342" stroke="#e2e8f0" stroke-width="8"/>
+  <path d="M220 280H190M220 305H190M322 280H292M322 305H292" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+</svg>
