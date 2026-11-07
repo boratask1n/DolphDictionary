@@ -3,38 +3,41 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
   Cloud, 
-  CheckCircle2, 
   LogIn, 
   LogOut, 
+  Trash2,
   ShieldCheck, 
   Database, 
   Sparkles,
-  RefreshCw,
   User,
   AlertCircle
 } from 'lucide-react';
-import { FirebaseUser, loginWithGoogle, logoutUser } from '../../services/firebase';
+import { FirebaseUser, loginWithGoogle, logoutUser, loginWithEmail, registerWithEmail } from '../../services/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isRequired?: boolean;
   currentUser: FirebaseUser | null;
-  onSyncLocalWords: () => Promise<number>;
-  isSyncing: boolean;
+  onDeleteAccount?: (password?: string) => Promise<void>;
   totalWordsCount: number;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
+  isRequired = false,
   currentUser,
-  onSyncLocalWords,
-  isSyncing,
+  onDeleteAccount,
   totalWordsCount,
 }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [syncedCount, setSyncedCount] = useState<number | null>(null);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!isOpen) return null;
 
@@ -43,9 +46,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoggingIn(true);
     try {
       await loginWithGoogle();
-      // On success, offer sync
-      const count = await onSyncLocalWords();
-      setSyncedCount(count);
     } catch (err: any) {
       if (err.code !== 'auth/popup-closed-by-user') {
         setErrorMsg(err.message || 'Giriş yapılırken bir sorun oluştu.');
@@ -59,19 +59,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMsg(null);
     try {
       await logoutUser();
-      setSyncedCount(null);
     } catch (err: any) {
       setErrorMsg(err.message || 'Çıkış yapılırken bir sorun oluştu.');
     }
   };
 
-  const handleManualSync = async () => {
+  const handleEmailAuth = async (event: React.FormEvent) => {
+    event.preventDefault();
     setErrorMsg(null);
+    setIsLoggingIn(true);
     try {
-      const count = await onSyncLocalWords();
-      setSyncedCount(count);
+      if (authMode === 'login') {
+        await loginWithEmail(email.trim(), password);
+      } else {
+        if (password.length < 6) throw new Error('Şifre en az 6 karakter olmalı.');
+        await registerWithEmail(email.trim(), password);
+      }
+      setEmail('');
+      setPassword('');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Senkronizasyon hatası.');
+      setErrorMsg(err.message || 'İşlem gerçekleştirilemedi.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!onDeleteAccount) return;
+    setErrorMsg(null);
+    setIsLoggingIn(true);
+    try {
+      await onDeleteAccount(deletePassword);
+    } catch (err: any) {
+      setErrorMsg(err.code === 'auth/requires-recent-login'
+        ? 'Hesabı silmek için güvenlik nedeniyle yeniden giriş yapmanız gerekiyor.'
+        : err.message || 'Hesap silinemedi.');
+    } finally {
+      setIsLoggingIn(false);
+      setShowDeleteConfirm(false);
+      setDeletePassword('');
     }
   };
 
@@ -83,7 +109,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={onClose}
+          onClick={isRequired ? undefined : onClose}
           className="fixed inset-0 bg-slate-900/50 dark:bg-black/70 backdrop-blur-xs"
         />
 
@@ -102,19 +128,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
               <div>
                 <h3 className="font-serif font-bold text-lg text-slate-900 dark:text-white">
-                  {currentUser ? 'Hesabım & Veritabanı' : 'Kalıcı Giriş Sistemi'}
+                  {currentUser ? 'Hesabım & Kayıtlarım' : 'Hesabınıza Giriş Yapın'}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {currentUser ? 'Firestore Bulut Veritabanı Bağlı' : 'Kelimelerinizi asla kaybetmeyin'}
+                  {currentUser ? 'Kayıtlarınız güvenle saklanıyor' : 'Kelimelerinizi kaybetmeyin'}
                 </p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {!isRequired && (
+              <button
+                onClick={onClose}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
 
           {/* Error notice */}
@@ -165,7 +193,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-400/[0.03] border border-emerald-500/15">
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Veritabanı Durumu</div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">Kayıt Durumu</div>
                   <div className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-1 flex items-center gap-1">
                     <Cloud className="w-3.5 h-3.5" />
                     <span>Bulutta Kalıcı</span>
@@ -173,24 +201,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {syncedCount !== null && (
-                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>{syncedCount} kelime Firestore veritabanına başarıyla eşitlendi!</span>
-                </div>
-              )}
-
               {/* Action buttons */}
               <div className="pt-2 flex flex-col gap-2">
-                <button
-                  onClick={handleManualSync}
-                  disabled={isSyncing}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-600' : ''}`} />
-                  <span>{isSyncing ? 'Eşitleniyor...' : 'Veritabanını Şimdi Eşitle'}</span>
-                </button>
-
+                {onDeleteAccount && (
+                  showDeleteConfirm ? (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 dark:border-rose-900/50 dark:bg-rose-950/30">
+                      <p className="text-xs text-rose-700 dark:text-rose-300">Hesabınız ve tüm kayıtlarınız kalıcı olarak silinecek.</p>
+                      {currentUser.providerData.some((provider) => provider.providerId === 'password') && (
+                        <input
+                          type="password"
+                          value={deletePassword}
+                          onChange={(event) => setDeletePassword(event.target.value)}
+                          placeholder="Hesap şifreniz"
+                          className="mt-2 w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs outline-none focus:border-rose-400 dark:border-rose-900/60 dark:bg-slate-900"
+                          autoComplete="current-password"
+                        />
+                      )}
+                      {currentUser.providerData.some((provider) => provider.providerId === 'google.com') && (
+                        <p className="mt-2 text-[11px] text-rose-600 dark:text-rose-300">
+                          Silme öncesi Google hesabınızla yeniden doğrulama yapılacaktır.
+                        </p>
+                      )}
+                      <div className="mt-2 flex gap-2">
+                        <button onClick={handleDeleteAccount} disabled={isLoggingIn} className="flex-1 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Evet, sil</button>
+                        <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">Vazgeç</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowDeleteConfirm(true)} className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition cursor-pointer">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hesabımı ve kayıtlarımı sil</span>
+                    </button>
+                  )
+                )}
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-semibold transition cursor-pointer"
@@ -202,9 +245,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           ) : (
             <div className="py-5 space-y-4">
+              <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+                <button onClick={() => setAuthMode('login')} className={`flex-1 rounded-lg py-2 text-xs font-semibold ${authMode === 'login' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500'}`}>Giriş yap</button>
+                <button onClick={() => setAuthMode('register')} className={`flex-1 rounded-lg py-2 text-xs font-semibold ${authMode === 'register' ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white' : 'text-slate-500'}`}>Kayıt ol</button>
+              </div>
               <div className="space-y-2 text-center py-2">
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Google hesabınızla giriş yaparak kelimelerinizi, analizlerinizi ve tekrar geçmişinizi <strong>Firebase Firestore</strong> veritabanına kalıcı olarak kaydedin.
+                  Google hesabınızla giriş yaparak kelimelerinizi, analizlerinizi ve tekrar geçmişinizi güvenle saklayın.
                 </p>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-800 dark:text-amber-300 text-xs font-semibold mt-2">
                   <Sparkles className="w-3.5 h-3.5" />
@@ -240,9 +287,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>{isLoggingIn ? 'Giriş yapılıyor...' : 'Google ile Giriş Yap'}</span>
               </button>
 
+              <div className="relative flex items-center gap-3 text-[11px] text-slate-400">
+                <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                <span>veya e-posta ile</span>
+                <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+              </div>
+
+              <form onSubmit={handleEmailAuth} className="space-y-2.5">
+                <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="E-posta adresi" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-slate-800" />
+                <input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Şifre (en az 6 karakter)" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-amber-400 dark:border-slate-700 dark:bg-slate-800" />
+                <button type="submit" disabled={isLoggingIn} className="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50 dark:bg-white dark:text-slate-900">
+                  {authMode === 'login' ? 'E-posta ile giriş yap' : 'Hesap oluştur'}
+                </button>
+              </form>
+
               <div className="flex items-center gap-2 justify-center text-[11px] text-slate-400">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Güvenli Firebase Kimlik Doğrulaması</span>
+                <span>Google ile güvenli giriş</span>
               </div>
             </div>
           )}

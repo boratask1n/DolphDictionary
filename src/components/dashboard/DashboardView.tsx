@@ -18,13 +18,8 @@ import {
   Target,
   Edit3,
   X,
-  BarChart3,
-  ChevronDown,
-  ChevronUp
 } from 'lucide-react';
 import { Word, ReviewLog, LanguageCode } from '../../types';
-import { HomeAIChatWidget } from '../ai/HomeAIChatWidget';
-import { DashboardAnalyticsCarousel } from './DashboardAnalyticsCarousel';
 
 interface DashboardViewProps {
   words: Word[];
@@ -56,7 +51,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onUpdateWeeklyGoal,
 }) => {
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
-  const [showQuickCarouselPreview, setShowQuickCarouselPreview] = useState(false);
 
   // Filter words strictly for current active language
   const languageWords = useMemo(() => {
@@ -257,7 +251,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 Günün Kelime Çalışması
               </h1>
               <p className="text-sm text-slate-600 dark:text-slate-300 mt-1.5 font-sans max-w-xl leading-relaxed">
-                Aralıklı tekrar (FSRS) ve animasyonlu Sticky Reels ile kelimeleri kalıcı hafızanıza kaydedin.
+                Akıllı tekrarlarla ve eğlenceli kelime kartlarıyla kelimeleri kalıcı olarak öğrenin.
               </p>
             </div>
           </div>
@@ -293,7 +287,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>Sticky Reels</span>
+                <span>Kelime Kartları</span>
               </button>
 
               <button
@@ -762,98 +756,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 4. ÖĞRENME ANALİTİĞİ & GRAFİKLER SAYFASI PORTALI */}
-      <section className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-md relative overflow-hidden border border-slate-700/50">
-        {/* Subtle decorative glow */}
-        <div className="absolute right-0 top-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute right-40 bottom-0 -mb-16 w-48 h-48 rounded-full bg-amber-500/10 blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          <div className="space-y-2 max-w-xl">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
-                <BarChart3 className="w-4 h-4" />
-              </span>
-              <span className="text-xs font-mono font-bold uppercase tracking-wider text-sky-400">
-                Ayrı Grafikler Sayfası
-              </span>
-            </div>
-            <h2 className="font-serif font-bold text-xl sm:text-2xl text-white tracking-tight">
-              Öğrenme Analitiği & Performans Grafikleri
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Zorlandığınız kritik kelimeler, Spaced Repetition (FSRS) hafıza kalıcılık eğrisi ve 7 günlük çalışma süresi sütun grafiği ayrı bir sayfa altında toplandı.
-            </p>
-
-            {/* Micro KPI highlights */}
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap pt-1 text-xs">
-              <span className="px-3 py-1 rounded-xl bg-white/10 text-rose-300 border border-white/10 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-400" />
-                <span>{difficultWords.length} Zor Kelime</span>
-              </span>
-              <span className="px-3 py-1 rounded-xl bg-white/10 text-emerald-300 border border-white/10 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>%{masteryPercentage} Kalıcı Bellek</span>
-              </span>
-              <span className="px-3 py-1 rounded-xl bg-white/10 text-sky-300 border border-white/10 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-sky-400" />
-                <span>7 Günlük Süre Grafiği</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
-            {onNavigateToAnalytics && (
-              <button
-                id="portal-analytics-btn"
-                onClick={onNavigateToAnalytics}
-                className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-sky-400 to-amber-400 hover:from-sky-300 hover:to-amber-300 text-slate-950 font-bold text-sm transition active:scale-95 shadow-lg shadow-sky-500/20 cursor-pointer"
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span>Grafikler Sayfasını Aç</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowQuickCarouselPreview(!showQuickCarouselPreview)}
-              className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-semibold border border-white/10 transition cursor-pointer"
-            >
-              <span>{showQuickCarouselPreview ? 'Önizlemeyi Gizle' : 'Anasayfada Önizle'}</span>
-              {showQuickCarouselPreview ? (
-                <ChevronUp className="w-4 h-4" />
-              ) : (
-                <ChevronDown className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Optional Expandable Preview Carousel */}
-        {showQuickCarouselPreview && (
-          <div className="mt-6 pt-6 border-t border-white/10">
-            <DashboardAnalyticsCarousel
-              words={words}
-              reviewLogs={reviewLogs}
-              activeLanguage={activeLanguage}
-              onSelectWord={onSelectWord}
-              onOpenAIChat={onOpenAIChat}
-              onStartReview={onStartReview}
-              onNavigateToDictionary={onNavigateToDictionary}
-            />
-          </div>
-        )}
-      </section>
-
       {/* 4. DEDICATED GENERAL AI CHAT WINDOW (Professional Language Coach) */}
-      <HomeAIChatWidget
-        activeLanguage={activeLanguage}
-        onExpand={() => onOpenAIChat?.()}
-        words={words}
-        reviewLogs={reviewLogs}
-      />
-
       {/* 4. DISCIPLINE HUBS & RECENT WORDS DISCOVERY */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         

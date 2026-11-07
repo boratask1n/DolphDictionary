@@ -1,16 +1,23 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const PORT = Number(process.env.PORT || 3000);
+const PRIMARY_GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+const DEFAULT_FALLBACK_GEMINI_MODELS = ["gemini-3.5-flash", "gemini-flash-latest"];
+const FALLBACK_GEMINI_MODELS = (process.env.GEMINI_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODEL || DEFAULT_FALLBACK_GEMINI_MODELS.join(","))
+  .split(",")
+  .map((model) => model.trim())
+  .filter(Boolean);
+const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 8000);
 
-const PORT = 3000;
+function logAI(message: string): void {
+  console.log(`[AI ${new Date().toISOString()}] ${message}`);
+}
 
 // Lazy initialization of Gemini client
 let aiClient: GoogleGenAI | null = null;
@@ -32,18 +39,27 @@ function getGenAI(): GoogleGenAI {
   return aiClient;
 }
 
-async function callGeminiWithRetry(options: any, maxRetries = 3): Promise<any> {
-  const modelsToTry = [options.model || "gemini-3.8-flash", "gemini-3.1-flash-lite"];
+async function callGeminiWithRetry(options: any, maxRetries = 1): Promise<any> {
+  const requestedModel = options.model || PRIMARY_GEMINI_MODEL;
+  const modelsToTry = [...new Set([requestedModel, ...FALLBACK_GEMINI_MODELS])];
   
   for (const model of modelsToTry) {
     let attempt = 0;
     while (attempt < maxRetries) {
+      const startedAt = Date.now();
+      logAI(`İstek başladı | model=${model} | deneme=${attempt + 1}/${maxRetries}`);
       try {
         const ai = getGenAI();
-        return await ai.models.generateContent({
+        const request = ai.models.generateContent({
           ...options,
           model,
         });
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error(`Gemini ${model} isteği ${GEMINI_REQUEST_TIMEOUT_MS / 1000} saniye içinde yanıt vermedi.`)), GEMINI_REQUEST_TIMEOUT_MS);
+        });
+        const response = await Promise.race([request, timeout]);
+        logAI(`Yanıt alındı | model=${model} | süre=${Date.now() - startedAt}ms`);
+        return response;
       } catch (err: any) {
         attempt++;
         const errStr = String(err?.message || err);
@@ -55,16 +71,17 @@ async function callGeminiWithRetry(options: any, maxRetries = 3): Promise<any> {
         
         if (isTransient && attempt < maxRetries) {
           const delay = attempt * 800;
-          console.warn(`Gemini model ${model} transient issue, retry in ${delay}ms...`);
+          logAI(`Geçici hata | model=${model} | süre=${Date.now() - startedAt}ms | ${errStr} | ${delay}ms sonra tekrar deneniyor`);
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
         
-        // If retries for this model exhausted and we have an alternate model, break to fallback model
         if (model !== modelsToTry[modelsToTry.length - 1]) {
-          console.warn(`Falling back to alternate model ${modelsToTry[1]}...`);
+          const nextModel = modelsToTry[modelsToTry.indexOf(model) + 1];
+          logAI(`Fallback'e geçiliyor | başarısız model=${model} | fallback=${nextModel} | süre=${Date.now() - startedAt}ms | neden=${errStr}`);
           break;
         }
+        logAI(`İstek başarısız | model=${model} | süre=${Date.now() - startedAt}ms | ${errStr}`);
         throw err;
       }
     }
@@ -118,7 +135,7 @@ BU ANALİZİ NASIL KULLANACAKSIN:
   return baseInstruction;
 }
 
-async function startServer() {
+export async function createApp() {
   const app = express();
 
   app.use(express.json());
@@ -131,6 +148,7 @@ async function startServer() {
 
   // AI Word Explain endpoint
   app.post("/api/gemini/word-explain", async (req, res) => {
+    const startedAt = Date.now();
     try {
       const { word, language, currentMeaning, context } = req.body;
       if (!word) {
@@ -160,7 +178,7 @@ Lütfen şu başlıklar altında son derece net, pedagojik ve estetik bir dille 
       const systemInstruction = getLanguageCoachSystemInstruction(activeLang);
 
       const response = await callGeminiWithRetry({
-        model: "gemini-3.8-flash",
+        model: PRIMARY_GEMINI_MODEL,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           systemInstruction,
@@ -175,8 +193,10 @@ Lütfen şu başlıklar altında son derece net, pedagojik ve estetik bir dille 
         language: activeLang,
         explanation: replyText,
       });
+      logAI(`word-explain tamamlandı | süre=${Date.now() - startedAt}ms`);
     } catch (error: any) {
       console.error("Gemini word explain error:", error);
+      logAI(`word-explain hata | süre=${Date.now() - startedAt}ms`);
       res.status(500).json({
         error: "Yapay zeka kelime analizi yaparken bir hata oluştu.",
         details: error?.message || String(error),
@@ -186,6 +206,7 @@ Lütfen şu başlıklar altında son derece net, pedagojik ve estetik bir dille 
 
   // AI Automatic Word Data & Enrichment endpoint (Word meaning, CEFR Level, Part of Speech, Example sentence, Secondary meanings, Tags)
   app.post("/api/gemini/generate-word-data", async (req, res) => {
+    const startedAt = Date.now();
     try {
       const { word, language, existingMeaning, category } = req.body;
       if (!word || typeof word !== "string" || !word.trim()) {
@@ -215,7 +236,7 @@ Sen uzman bir dilbilimci ve ${langName} öğretmenisin. Yukarıdaki kelimeyi ana
 KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinlikle ${langName} olmalı; açıklamalar, yan anlamlar ve cümle çevirisi Türkçe olmalıdır. Asla ${forbiddenLang} karıştırma.`;
 
       const response = await callGeminiWithRetry({
-        model: "gemini-3.8-flash",
+        model: PRIMARY_GEMINI_MODEL,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           systemInstruction: `Sen LexiLab dil asistanısın. Kullanıcı ${langName} dilinde kelime eklerken pedagojik ve dilbilimsel açıdan en doğru bilgileri JSON olarak sağlarsın.`,
@@ -289,8 +310,10 @@ KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinli
           tags: Array.isArray(parsedData.tags) ? parsedData.tags : [],
         },
       });
+      logAI(`generate-word-data tamamlandı | süre=${Date.now() - startedAt}ms`);
     } catch (error: any) {
       console.error("Gemini generate-word-data error:", error);
+      logAI(`generate-word-data hata | süre=${Date.now() - startedAt}ms`);
       res.status(500).json({
         error: "Yapay zeka ile kelime verileri oluşturulurken bir hata oluştu.",
         details: error?.message || String(error),
@@ -300,6 +323,7 @@ KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinli
 
   // AI Chat endpoint (multi-turn conversation with user vocab analytics)
   app.post("/api/gemini/chat", async (req, res) => {
+    const startedAt = Date.now();
     try {
       const { message, history, language, contextWord, userContext } = req.body;
       if (!message || typeof message !== "string") {
@@ -313,7 +337,7 @@ KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinli
 
       // Add conversation history if present
       if (Array.isArray(history)) {
-        for (const item of history) {
+        for (const item of history.slice(-12)) {
           if (item && item.role && item.content) {
             contents.push({
               role: item.role === "model" ? "model" : "user",
@@ -337,7 +361,7 @@ KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinli
       const systemInstruction = getLanguageCoachSystemInstruction(activeLang, userContext);
 
       const response = await callGeminiWithRetry({
-        model: "gemini-3.8-flash",
+        model: PRIMARY_GEMINI_MODEL,
         contents,
         config: {
           systemInstruction,
@@ -350,8 +374,10 @@ KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinli
         success: true,
         reply: replyText,
       });
+      logAI(`chat tamamlandı | süre=${Date.now() - startedAt}ms`);
     } catch (error: any) {
       console.error("Gemini chat error:", error);
+      logAI(`chat hata | süre=${Date.now() - startedAt}ms`);
       res.status(500).json({
         error: "Yapay zeka yanıt üretirken bir sorun yaşandı.",
         details: error?.message || String(error),
@@ -374,9 +400,16 @@ KESİN KURAL: Hedef dil ${langName} olduğundan, örnek cümle ve kelime kesinli
     });
   }
 
+  return app;
+}
+
+async function startServer() {
+  const app = await createApp();
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+if (process.env.VERCEL !== "1") {
+  void startServer();
+}

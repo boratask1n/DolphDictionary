@@ -31,6 +31,7 @@ interface DictionaryViewProps {
   onDeleteWord: (id: string) => void;
   onUpdateWord?: (word: Word) => void;
   initialContextFilter?: string | null;
+  initialSearchQuery?: string;
   onOpenAIChat?: (word: Word) => void;
 }
 
@@ -80,6 +81,7 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
   onDeleteWord,
   onUpdateWord,
   initialContextFilter = null,
+  initialSearchQuery = '',
   onOpenAIChat,
 }) => {
   // Search & Filter States
@@ -129,6 +131,10 @@ export const DictionaryView: React.FC<DictionaryViewProps> = ({
       setSelectedContext(initialContextFilter);
     }
   }, [initialContextFilter]);
+
+  useEffect(() => {
+    setSearchQuery(initialSearchQuery);
+  }, [initialSearchQuery]);
 
   // Words for current language
   const languageWords = useMemo(() => {

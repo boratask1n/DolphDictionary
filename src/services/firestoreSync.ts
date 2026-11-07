@@ -12,7 +12,24 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType, FirebaseUser } from './firebase';
-import { Word, ReviewLog, UserSettings } from '../types';
+import { Word, ReviewLog, UserSettings, LanguageCode } from '../types';
+import { ChatSession } from './aiTutorService';
+
+function removeUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => removeUndefined(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, removeUndefined(item)])
+    ) as T;
+  }
+  return value;
+}
 
 /**
  * Ensure user document exists in Firestore
@@ -24,22 +41,14 @@ export async function syncUserProfile(user: FirebaseUser): Promise<void> {
     const existing = await getDoc(userDocRef);
     const now = new Date().toISOString();
 
-    if (!existing.exists()) {
-      await setDoc(userDocRef, {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || 'Kullanıcı',
-        photoURL: user.photoURL || '',
-        createdAt: now,
-        lastLoginAt: now,
-      });
-    } else {
-      await updateDoc(userDocRef, {
-        displayName: user.displayName || 'Kullanıcı',
-        photoURL: user.photoURL || '',
-        lastLoginAt: now,
-      });
-    }
+    await setDoc(userDocRef, {
+      uid: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || 'Kullanıcı',
+      photoURL: user.photoURL || '',
+      ...(existing.exists() ? {} : { createdAt: now }),
+      lastLoginAt: now,
+    }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -99,7 +108,7 @@ export async function saveWordToFirestore(userId: string, word: Word): Promise<v
       streak: Number(word.streak || 0),
     };
 
-    await setDoc(wordRef, sanitizedWord, { merge: true });
+    await setDoc(wordRef, removeUndefined(sanitizedWord), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -131,7 +140,7 @@ export async function saveReviewLogToFirestore(userId: string, log: ReviewLog): 
       id: logId,
       userId,
     };
-    await setDoc(logRef, payload);
+    await setDoc(logRef, removeUndefined(payload));
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
   }
@@ -154,6 +163,63 @@ export async function fetchUserReviewLogsFromFirestore(userId: string): Promise<
     handleFirestoreError(error, OperationType.LIST, path);
     return [];
   }
+}
+
+export async function fetchUserChatSessionsFromFirestore(userId: string): Promise<ChatSession[]> {
+    const path = `users/${userId}/chatSessions`;
+    try {
+      const snapshot = await getDocs(collection(db, 'users', userId, 'chatSessions'));
+      return snapshot.docs
+        .map((item) => item.data() as ChatSession)
+        .filter((chat) => chat.language === 'en' || chat.language === 'de')
+        .map((chat) => ({
+          ...chat,
+          messages: Array.isArray(chat.messages) ? chat.messages.slice(-50) : [],
+        }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+      return [];
+  }
+}
+
+export async function saveChatSessionToFirestore(userId: string, chat: ChatSession): Promise<void> {
+    const chatId = chat.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const path = `users/${userId}/chatSessions/${chatId}`;
+    try {
+      const chatRef = doc(db, 'users', userId, 'chatSessions', chatId);
+      await setDoc(chatRef, removeUndefined({
+        id: chatId,
+        userId,
+        language: chat.language,
+        title: chat.title.slice(0, 120),
+        messages: chat.messages.slice(-50),
+        updatedAt: chat.updatedAt,
+      }), { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+}
+
+export async function deleteChatSessionFromFirestore(userId: string, chatId: string): Promise<void> {
+    const safeId = chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const path = `users/${userId}/chatSessions/${safeId}`;
+    try {
+      await deleteDoc(doc(db, 'users', userId, 'chatSessions', safeId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+}
+
+export async function deleteUserDataFromFirestore(userId: string): Promise<void> {
+      const subcollections = ['words', 'reviewLogs', 'chatSessions', 'settings'];
+      for (const subcollection of subcollections) {
+        const snapshot = await getDocs(collection(db, 'users', userId, subcollection));
+        if (snapshot.empty) continue;
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((item) => batch.delete(item.ref));
+        await batch.commit();
+      }
+      await deleteDoc(doc(db, 'users', userId));
 }
 
 /**
@@ -181,7 +247,7 @@ export async function syncLocalWordsToFirestore(userId: string, localWords: Word
         dateAdded: w.dateAdded || new Date().toISOString(),
         nextReviewDate: w.nextReviewDate || new Date().toISOString(),
       };
-      batch.set(wRef, payload, { merge: true });
+      batch.set(wRef, removeUndefined(payload), { merge: true });
       count++;
     }
     await batch.commit();
@@ -195,7 +261,7 @@ export async function syncLocalWordsToFirestore(userId: string, localWords: Word
 export function subscribeToUserWords(
   userId: string,
   onUpdate: (words: Word[]) => void,
-  onError: (err: any) => void
+  onError: (err: unknown) => void
 ) {
   const path = `users/${userId}/words`;
   const wordsCol = collection(db, 'users', userId, 'words');

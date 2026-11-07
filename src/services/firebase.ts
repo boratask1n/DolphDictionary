@@ -3,6 +3,12 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  deleteUser,
   signOut, 
   onAuthStateChanged,
   User as FirebaseUser
@@ -92,6 +98,11 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
     return result.user;
   } catch (err: any) {
     console.error('Google Sign-In failed:', err);
+    if (err?.code === 'auth/unauthorized-domain' && typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      const message = `${hostname} adresi giriş için yetkilendirilmemiş. Firebase Console > Authentication > Settings > Authorized domains bölümüne "${hostname}" adresini ekleyin.`;
+      throw Object.assign(new Error(message), { code: err.code });
+    }
     throw err;
   }
 }
@@ -103,6 +114,51 @@ export async function logoutUser(): Promise<void> {
     console.error('Logout failed:', err);
     throw err;
   }
+}
+
+export async function loginWithEmail(email: string, password: string): Promise<FirebaseUser> {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
+  }
+
+export async function registerWithEmail(email: string, password: string): Promise<FirebaseUser> {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    return result.user;
+  }
+
+export async function deleteCurrentUser(): Promise<void> {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Silinecek aktif hesap bulunamadı.');
+    await deleteUser(user);
+}
+
+export async function reauthenticateCurrentUser(password?: string): Promise<void> {
+    const user = auth.currentUser;
+    if (!user) throw new Error('Yeniden doğrulanacak aktif hesap bulunamadı.');
+
+    const passwordProvider = user.providerData.some((provider) => provider.providerId === 'password');
+    if (passwordProvider) {
+      if (!user.email || !password) {
+        throw Object.assign(new Error('Hesap şifrenizi girerek yeniden doğrulama yapın.'), {
+          code: 'auth/password-required',
+        });
+      }
+      await reauthenticateWithCredential(
+        user,
+        EmailAuthProvider.credential(user.email, password)
+      );
+      return;
+    }
+
+    const googleProvider = user.providerData.some((provider) => provider.providerId === 'google.com');
+    if (googleProvider) {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await reauthenticateWithPopup(user, provider);
+      return;
+    }
+
+    throw new Error('Bu hesap sağlayıcısı için yeniden doğrulama desteklenmiyor.');
 }
 
 export { onAuthStateChanged };

@@ -18,7 +18,7 @@ import {
   Database
 } from 'lucide-react';
 import { Word, LanguageCode, ReviewLog } from '../../types';
-import { ChatMessage, explainWordWithAI, sendChatMessageToAI, UserVocabContext } from '../../services/aiTutorService';
+import { ChatMessage, explainWordWithAI, sendChatMessageToAI, MAX_CONTEXT_MESSAGES } from '../../services/aiTutorService';
 import { buildUserVocabContext } from '../../utils/vocabAnalytics';
 import { FormattedAIMessage } from './FormattedAIMessage';
 
@@ -29,6 +29,10 @@ interface AIChatDrawerProps {
   activeLanguage: LanguageCode;
   allWords?: Word[];
   reviewLogs?: ReviewLog[];
+  messages: ChatMessage[];
+  onMessagesChange: (messages: ChatMessage[]) => void;
+  onNewChat: () => void;
+  chatCount: number;
 }
 
 export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
@@ -38,14 +42,30 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
   activeLanguage,
   allWords = [],
   reviewLogs = [],
+  messages,
+  onMessagesChange,
+  onNewChat,
+  chatCount,
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputPrompt, setInputPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [speakingText, setSpeakingText] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef(messages);
+  const analysisRequestRef = useRef<string | null>(null);
+  const analysisInFlightRef = useRef(false);
+  const sendInFlightRef = useRef(false);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const commitMessages = (nextMessages: ChatMessage[]) => {
+    messagesRef.current = nextMessages;
+    onMessagesChange(nextMessages);
+  };
 
   // Suggested prompt chips based on whether a word is active
   const wordPrompts = [
@@ -70,30 +90,23 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
 
   // Initialize or fetch AI content when drawer opens
   useEffect(() => {
-    if (!isOpen) return;
-
-    if (word) {
-      // If we opened with a specific word, check if we already have it in current messages
-      const hasWordExpl = messages.some(
-        (m) => m.contextWord?.toLowerCase() === word.word.toLowerCase() && m.role === 'model'
-      );
-
-      if (!hasWordExpl) {
-        // Fetch fresh explanation for this word
-        handleFetchWordExplanation(word);
-      }
-    } else if (messages.length === 0) {
-      // General greeting
-      const langName = activeLanguage === 'de' ? 'Almanca' : 'İngilizce';
-      const welcomeMsg: ChatMessage = {
-        id: `welcome-${Date.now()}`,
-        role: 'model',
-        content: `Merhaba! Ben **LexiLab AI Dil Koçun** 🎓\n\n${langName} ve Türkçe dillerinde uzman bir dil mentörüyüm. Kelime anlamları, cümle analizleri, gramer açıklamaları, telaffuz veya serbest konuşma pratiği için dilediğin gibi sorabilirsin.\n\n*Aşağıdaki önerilerden birine tıklayabilir veya aklındaki soruyu yazabilirsin:*`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages([welcomeMsg]);
+    const requestKey = word ? `${word.id}:${word.word}:${activeLanguage}` : null;
+    if (!isOpen || !word || !requestKey || analysisInFlightRef.current || analysisRequestRef.current === requestKey) return;
+    const hasWordExpl = messagesRef.current.some(
+      (m) => m.contextWord?.toLowerCase() === word.word.toLowerCase() && m.role === 'model'
+    );
+    if (!hasWordExpl) {
+      analysisRequestRef.current = requestKey;
+      void handleFetchWordExplanation(word);
     }
   }, [isOpen, word, activeLanguage]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      analysisRequestRef.current = null;
+      analysisInFlightRef.current = false;
+    }
+  }, [isOpen]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -108,6 +121,9 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
   }, [isOpen]);
 
   const handleFetchWordExplanation = async (targetWord: Word) => {
+    if (analysisInFlightRef.current || !analysisRequestRef.current) return;
+    const requestKey = analysisRequestRef.current;
+    analysisInFlightRef.current = true;
     setIsLoading(true);
     const meaning = targetWord.meanings[0]?.trMeaning || '';
     
@@ -120,41 +136,52 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
       contextWord: targetWord.word,
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const currentMessages = messagesRef.current;
+    if (!currentMessages.some((message) => message.id === userMsg.id)) {
+      commitMessages([...currentMessages, userMsg]);
+    }
 
-    const result = await explainWordWithAI(
-      targetWord.word,
-      targetWord.language || activeLanguage,
-      meaning,
-      targetWord.primaryAcademicContext
-    );
+    try {
+      const result = await explainWordWithAI(
+        targetWord.word,
+        targetWord.language || activeLanguage,
+        meaning,
+        targetWord.primaryAcademicContext
+      );
 
-    setIsLoading(false);
-
-    if (result.success && result.explanation) {
-      const modelMsg: ChatMessage = {
-        id: `resp-${Date.now()}`,
-        role: 'model',
-        content: result.explanation,
-        timestamp: new Date().toISOString(),
-        contextWord: targetWord.word,
-      };
-      setMessages((prev) => [...prev, modelMsg]);
-    } else {
-      const errorMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
-        role: 'model',
-        content: `Kelime analizi yüklenirken bir problem oluştu: ${result.error || 'Bilinmeyen hata'}. Lütfen tekrar deneyin.`,
-        timestamp: new Date().toISOString(),
-        contextWord: targetWord.word,
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      if (analysisRequestRef.current !== requestKey) return;
+      const latestMessages = messagesRef.current;
+      if (result.success && result.explanation) {
+        const modelMsg: ChatMessage = {
+          id: `resp-${Date.now()}`,
+          role: 'model',
+          content: result.explanation,
+          timestamp: new Date().toISOString(),
+          contextWord: targetWord.word,
+        };
+        commitMessages(latestMessages.some((message) => message.contextWord?.toLowerCase() === targetWord.word.toLowerCase() && message.role === 'model')
+          ? latestMessages
+          : [...latestMessages, modelMsg]);
+      } else {
+        const errorMsg: ChatMessage = {
+          id: `err-${Date.now()}`,
+          role: 'model',
+          content: `Kelime analizi yüklenirken bir problem oluştu: ${result.error || 'Bilinmeyen hata'}. Lütfen tekrar deneyin.`,
+          timestamp: new Date().toISOString(),
+          contextWord: targetWord.word,
+        };
+        commitMessages([...latestMessages, errorMsg]);
+      }
+    } finally {
+      analysisInFlightRef.current = false;
+      setIsLoading(false);
     }
   };
 
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputPrompt).trim();
-    if (!text || isLoading) return;
+    if (!text || isLoading || sendInFlightRef.current || analysisInFlightRef.current) return;
+    sendInFlightRef.current = true;
 
     setInputPrompt('');
 
@@ -166,40 +193,44 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
       contextWord: word?.word,
     };
 
-    const nextHistory = [...messages, newMsg];
-    setMessages(nextHistory);
+    const nextHistory = [...messagesRef.current, newMsg];
+    commitMessages(nextHistory);
     setIsLoading(true);
 
-    const currentLang = word?.language || activeLanguage;
-    const userContext = buildUserVocabContext(allWords, reviewLogs, currentLang);
+    try {
+      const currentLang = word?.language || activeLanguage;
+      const userContext = buildUserVocabContext(allWords, reviewLogs, currentLang);
 
-    const res = await sendChatMessageToAI(
-      text,
-      nextHistory,
-      currentLang,
-      word?.word,
-      userContext
-    );
+      const res = await sendChatMessageToAI(
+        text,
+        nextHistory.slice(-MAX_CONTEXT_MESSAGES),
+        currentLang,
+        word?.word,
+        userContext
+      );
 
-    setIsLoading(false);
-
-    if (res.success && res.reply) {
-      const replyMsg: ChatMessage = {
-        id: `model-${Date.now()}`,
-        role: 'model',
-        content: res.reply,
-        timestamp: new Date().toISOString(),
-        contextWord: word?.word,
-      };
-      setMessages((prev) => [...prev, replyMsg]);
-    } else {
-      const errorMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
-        role: 'model',
-        content: `Üzgünüm, yanıt oluşturulurken bir hata meydana geldi: ${res.error || 'Sunucu hatası'}.`,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      const latestMessages = messagesRef.current;
+      if (res.success && res.reply) {
+        const replyMsg: ChatMessage = {
+          id: `model-${Date.now()}`,
+          role: 'model',
+          content: res.reply,
+          timestamp: new Date().toISOString(),
+          contextWord: word?.word,
+        };
+        commitMessages([...latestMessages, replyMsg]);
+      } else {
+        const errorMsg: ChatMessage = {
+          id: `err-${Date.now()}`,
+          role: 'model',
+          content: `Üzgünüm, yanıt oluşturulurken bir hata meydana geldi: ${res.error || 'Sunucu hatası'}.`,
+          timestamp: new Date().toISOString(),
+        };
+        commitMessages([...latestMessages, errorMsg]);
+      }
+    } finally {
+      sendInFlightRef.current = false;
+      setIsLoading(false);
     }
   };
 
@@ -223,10 +254,7 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
   };
 
   const handleClearHistory = () => {
-    setMessages([]);
-    if (word) {
-      handleFetchWordExplanation(word);
-    }
+    onNewChat();
   };
 
   if (!isOpen) return null;
@@ -289,6 +317,7 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
 
             {/* Top action icons */}
             <div className="flex items-center gap-1 shrink-0">
+              <span className="text-[10px] text-slate-400 mr-1">{chatCount}/3 sohbet</span>
               {word && (
                 <button
                   onClick={() => handlePlayAudio(word.word)}
@@ -299,13 +328,15 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
                 </button>
               )}
 
-              <button
-                onClick={handleClearHistory}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                title="Sohbeti Temizle"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
+              {messages.length > 0 && (
+                <button
+                  onClick={handleClearHistory}
+                  className="p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  title="Yeni sohbet"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 onClick={onClose}
@@ -350,6 +381,25 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
 
           {/* Messages Scroll Area */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 scrollbar-thin">
+            {messages.length === 0 && !isLoading && (
+              <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-4">
+                  <MessageSquare className="w-7 h-7" />
+                </div>
+                <h3 className="font-serif text-lg font-bold text-slate-900 dark:text-white">Henüz sohbet yok</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-sm">
+                  AI Koç ile konuşmaya başlamak için yeni bir sohbet oluştur.
+                </p>
+                <button
+                  type="button"
+                  onClick={onNewChat}
+                  className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Yeni sohbet
+                </button>
+              </div>
+            )}
             {messages.map((msg) => {
               const isUser = msg.role === 'user';
               return (
@@ -466,7 +516,7 @@ export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
               </button>
             </form>
             <p className="text-[10px] text-slate-400 text-center mt-1.5 font-sans">
-              Enter ile gönder · Shift + Enter ile yeni satır · Gemini 3.8 Flash ile güçlendirildi
+              Enter ile gönder · Shift + Enter ile yeni satır · Gemini AI ile güçlendirildi
             </p>
           </div>
         </motion.div>
