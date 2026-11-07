@@ -283,7 +283,7 @@ export const WordDetailModal: React.FC<WordDetailModalProps> = ({
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2.5 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              <span>Aralıklı Tekrar Durumu (FSRS Bellek İstatistiği)</span>
+              <span>Tekrar ve Öğrenme Durumu</span>
             </h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
               <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800">

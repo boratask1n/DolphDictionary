@@ -13,6 +13,11 @@ export class AcademicVocabDB extends Dexie {
       reviewLogs: 'id, wordId, timestamp, feedback, mode',
       settings: 'key',
     });
+    this.version(2).stores({
+      words: 'id, userId, word, language, partOfSpeech, primaryAcademicContext, learningStatus, difficultyLabel, nextReviewDate, lastReviewed, dateAdded, *tags',
+      reviewLogs: 'id, userId, wordId, timestamp, feedback, mode',
+      settings: 'key',
+    });
   }
 }
 
@@ -883,21 +888,14 @@ const SEED_WORDS: Word[] = [
 ];
 
 /**
- * Initialize DB with seed vocabulary if empty
+ * Initialize the local database without adding sample vocabulary.
+ * The application starts empty and authenticated users load their data
+ * from Firestore.
  */
 export async function initializeDatabase(): Promise<void> {
-  const count = await db.words.count();
-  if (count === 0) {
-    await db.words.bulkAdd(SEED_WORDS);
-  } else {
-    // Add any missing seeds (e.g. German words added recently)
-    for (const seed of SEED_WORDS) {
-      const exists = await db.words.get(seed.id);
-      if (!exists) {
-        await db.words.put(seed);
-      }
-    }
-  }
+  // Remove vocabulary that was bundled by older versions, while preserving
+  // words created by the user.
+  await db.words.bulkDelete(SEED_WORDS.map((seed) => seed.id));
 
   const existingSettings = await db.settings.get('userSettings');
   if (!existingSettings) {
@@ -958,4 +956,9 @@ export async function resetDatabaseToSeeds(): Promise<void> {
 export async function clearAllData(): Promise<void> {
   await db.words.clear();
   await db.reviewLogs.clear();
+  await db.settings.clear();
+}
+
+export async function clearLocalUserData(): Promise<void> {
+  await clearAllData();
 }

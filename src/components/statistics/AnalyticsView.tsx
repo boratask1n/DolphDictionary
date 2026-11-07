@@ -8,7 +8,6 @@ import {
   RotateCw, 
   TrendingUp, 
   Calendar,
-  Clock,
   BookOpen,
   Volume2,
   Sparkles,
@@ -42,15 +41,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onSelectWord,
   onOpenAIChat,
 }) => {
-  const [selectedLanguageFilter, setSelectedLanguageFilter] = useState<'current' | 'all'>('current');
-  const [activeChartTab, setActiveChartTab] = useState<'all' | 'struggled' | 'progress' | 'time'>('all');
+  const [activeChartTab, setActiveChartTab] = useState<'struggled' | 'progress' | 'time'>('progress');
+  const [weeklyMetric, setWeeklyMetric] = useState<'added' | 'reviewed'>('added');
   const [playingWordId, setPlayingWordId] = useState<string | null>(null);
 
   // Filter words based on selected scope
   const targetWords = useMemo(() => {
-    if (selectedLanguageFilter === 'all') return words;
     return words.filter((w) => w.language === activeLanguage);
-  }, [words, activeLanguage, selectedLanguageFilter]);
+  }, [words, activeLanguage]);
 
   const now = Date.now();
   const totalWords = targetWords.length;
@@ -126,7 +124,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   }, [totalWords, totalReviews, rememberedLogs, masteredWords, learningWords, reviewWords]);
 
   const cefrLevels = useMemo(() => {
-    const levels = ['B1', 'B2', 'C1', 'C2'] as const;
+    const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
     return levels.map((lvl) => {
       const count = targetWords.filter((w) => w.cefrLevel === lvl).length;
       const percentage = totalWords > 0 ? Math.round((count / totalWords) * 100) : 0;
@@ -134,16 +132,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     });
   }, [targetWords, totalWords]);
 
-  // 3. DATA: 7-Day Weekly Study Time
-  const weeklyStudyStats = useMemo(() => {
+  // 3. DATA: 7-Day vocabulary activity
+  const weeklyActivityStats = useMemo(() => {
     const daysList = [];
     const dayNamesTR = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
     const today = new Date();
-    
-    let totalMinutesWeek = 0;
+    const targetWordIds = new Set(targetWords.map((word) => word.id));
+    let totalAddedWeek = 0;
     let totalReviewsWeek = 0;
-    let maxMinutesDay = 0;
-    let peakDayName = '';
 
     for (let i = 6; i >= 0; i--) {
       const targetDate = new Date();
@@ -155,53 +151,45 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
       const dayLogs = reviewLogs.filter((log) => {
         try {
-          return new Date(log.timestamp).toISOString().split('T')[0] === dateKey;
+          return targetWordIds.has(log.wordId) && new Date(log.timestamp).toISOString().split('T')[0] === dateKey;
         } catch {
           return false;
         }
       });
 
       const reviewCount = dayLogs.length;
+      const addedCount = targetWords.filter((word) => {
+        try {
+          return new Date(word.dateAdded).toISOString().split('T')[0] === dateKey;
+        } catch {
+          return false;
+        }
+      }).length;
+      totalAddedWeek += addedCount;
       totalReviewsWeek += reviewCount;
-
-      let minutes = reviewCount > 0 ? Math.round((reviewCount * 0.85) + 3) : 0;
-      if (isToday && minutes === 0 && targetWords.some(w => w.lastReviewed && w.lastReviewed.startsWith(dateKey))) {
-        minutes = 12;
-      }
-
-      totalMinutesWeek += minutes;
-      if (minutes > maxMinutesDay) {
-        maxMinutesDay = minutes;
-        peakDayName = dayLabel;
-      }
 
       daysList.push({
         dateKey,
         dayLabel,
         isToday,
         reviewCount,
-        minutes,
+        addedCount,
         heightPercentage: 0,
       });
     }
 
-    const chartCeiling = Math.max(30, maxMinutesDay * 1.25);
+    const maxCount = Math.max(1, ...daysList.map((day) => Math.max(day.addedCount, day.reviewCount)));
     daysList.forEach((d) => {
-      d.heightPercentage = Math.min(100, Math.max(d.minutes > 0 ? 12 : 4, Math.round((d.minutes / chartCeiling) * 100)));
+      d.heightPercentage = Math.min(100, Math.max(4, Math.round((Math.max(d.addedCount, d.reviewCount) / maxCount) * 100)));
     });
-
-    const averageDailyMinutes = Math.round(totalMinutesWeek / 7);
-    const dailyTargetMinutes = 20;
-    const targetAchievedDays = daysList.filter((d) => d.minutes >= dailyTargetMinutes).length;
 
     return {
       daysList,
-      totalMinutesWeek,
+      totalAddedWeek,
       totalReviewsWeek,
-      averageDailyMinutes,
-      dailyTargetMinutes,
-      targetAchievedDays,
-      peakDayName: peakDayName || 'Bugün',
+      mostActiveDay: daysList.reduce((best, day) =>
+        (day.addedCount + day.reviewCount) > (best.addedCount + best.reviewCount) ? day : best
+      , daysList[0]),
     };
   }, [reviewLogs, targetWords]);
 
@@ -240,36 +228,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             Performans & İlerleme Grafikleri
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
-            Zorlandığınız kelimeler, hafıza kalıcılık oranları ve haftalık çalışma sürelerinizin detaylı görsel analizi.
+            Zorlandığınız kelimeler, hafıza kalıcılığınız ve öğrenme ilerlemeniz için sade bir özet.
           </p>
         </div>
 
-        {/* Filters and CTA */}
+        {/* Actions */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Scope switch: Current language vs All */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-white/[0.06] text-xs font-semibold">
-            <button
-              onClick={() => setSelectedLanguageFilter('current')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                selectedLanguageFilter === 'current'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              {activeLanguage === 'en' ? '🇬🇧 İngilizce' : '🇩🇪 Almanca'}
-            </button>
-            <button
-              onClick={() => setSelectedLanguageFilter('all')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                selectedLanguageFilter === 'all'
-                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
-                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              Tüm Diller ({words.length})
-            </button>
-          </div>
-
           <button
             onClick={onStartReview}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 font-semibold text-xs transition cursor-pointer shadow-xs"
@@ -281,7 +245,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       </section>
 
       {/* Top 4 Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/[0.08] shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 text-xs mb-1.5">
             <span>Toplam Kelime</span>
@@ -304,20 +268,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             %{memoryRetentionRate}
           </div>
           <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-1">
-            FSRS aralıklı tekrar skoru
-          </p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/[0.08] shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs mb-1.5">
-            <span>Haftalık Çalışma</span>
-            <Clock className="w-4 h-4 text-sky-500" />
-          </div>
-          <div className="font-sans font-bold text-2xl sm:text-3xl text-sky-600 dark:text-sky-400 tabular-nums">
-            {weeklyStudyStats.totalMinutesWeek} <span className="text-base font-sans font-medium text-slate-400">dk</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Ortalama {weeklyStudyStats.averageDailyMinutes} dk / gün
+            Tekrarlarla güçlenen öğrenme skoru
           </p>
         </div>
 
@@ -337,16 +288,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
       {/* Nav Tabs for Chart Focus */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/[0.08] pb-3 overflow-x-auto">
-        <button
-          onClick={() => setActiveChartTab('all')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
-            activeChartTab === 'all'
-              ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-2xs'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          Tüm Grafikler
-        </button>
         <button
           onClick={() => setActiveChartTab('struggled')}
           className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition cursor-pointer whitespace-nowrap ${
@@ -377,13 +318,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <Clock className="w-3.5 h-3.5" />
-          <span>Haftalık Çalışma Süresi Grafiği</span>
+          <BarChart3 className="w-3.5 h-3.5" />
+          <span>Haftalık Kelime Aktivitesi</span>
         </button>
       </div>
 
       {/* SECTION 1: EN ÇOK ZORLANILAN KELİMELER GRAFİĞİ */}
-      {(activeChartTab === 'all' || activeChartTab === 'struggled') && (
+      {activeChartTab === 'struggled' && (
         <section className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -524,7 +465,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       )}
 
       {/* SECTION 2: ÖĞRENME İLERLEMESİ & BELLEK DAĞILIMI GRAFİĞİ */}
-      {(activeChartTab === 'all' || activeChartTab === 'progress') && (
+      {activeChartTab === 'progress' && (
         <section className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -537,7 +478,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 </h2>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Kelimelerin kalıcılık aşamaları, CEFR seviye dağılımı ve Spaced Repetition (FSRS) kararlılık durumu.
+                Kelimelerin öğrenme durumu, dil seviyeleri ve kalıcı öğrenme ilerlemesi.
               </p>
             </div>
 
@@ -562,7 +503,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                       <span>Ustalaşıldı (Kalıcı Bellek)</span>
                     </span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <span className="font-sans font-bold text-slate-700 dark:text-slate-300">
                       {masteredWords} ({totalWords > 0 ? Math.round((masteredWords / totalWords) * 100) : 0}%)
                     </span>
                   </div>
@@ -581,7 +522,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                       <span>Aktif Öğreniliyor</span>
                     </span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <span className="font-sans font-bold text-slate-700 dark:text-slate-300">
                       {learningWords} ({totalWords > 0 ? Math.round((learningWords / totalWords) * 100) : 0}%)
                     </span>
                   </div>
@@ -600,7 +541,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
                       <span>Periyodik Tekrar Sırasında</span>
                     </span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <span className="font-sans font-bold text-slate-700 dark:text-slate-300">
                       {reviewWords} ({totalWords > 0 ? Math.round((reviewWords / totalWords) * 100) : 0}%)
                     </span>
                   </div>
@@ -619,7 +560,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
                       <span>Zor / Takılınan</span>
                     </span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <span className="font-sans font-bold text-slate-700 dark:text-slate-300">
                       {difficultWords} ({totalWords > 0 ? Math.round((difficultWords / totalWords) * 100) : 0}%)
                     </span>
                   </div>
@@ -638,7 +579,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
                       <span>Henüz Başlanmamış Yeni</span>
                     </span>
-                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                    <span className="font-sans font-bold text-slate-700 dark:text-slate-300">
                       {newWords} ({totalWords > 0 ? Math.round((newWords / totalWords) * 100) : 0}%)
                     </span>
                   </div>
@@ -656,23 +597,23 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <div className="lg:col-span-7 space-y-4">
               <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/50 dark:border-white/[0.04] space-y-3">
                 <h3 className="font-serif font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center justify-between">
-                  <span>CEFR Dil Seviyesi Dağılımı</span>
-                  <span className="text-xs font-mono font-normal text-slate-400">B1 - C2</span>
+                  <span>Dil Seviyesi Dağılımı</span>
+                  <span className="text-xs font-sans font-normal text-slate-400">A1 - C2</span>
                 </h3>
 
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {cefrLevels.map((lvl) => (
                     <div 
                       key={lvl.level}
                       className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-white/[0.06] text-center"
                     >
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      <span className="text-xs font-sans font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                         {lvl.level}
                       </span>
-                      <div className="font-serif font-bold text-lg text-slate-900 dark:text-slate-100 mt-2">
+                      <div className="font-sans font-bold text-lg text-slate-900 dark:text-slate-100 mt-2">
                         {lvl.count}
                       </div>
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      <p className="text-[10px] text-slate-400 font-sans mt-0.5">
                         %{lvl.percentage}
                       </p>
                     </div>
@@ -686,7 +627,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <span className="font-serif font-bold text-slate-900 dark:text-slate-100">
                     Öğrenilen Alanlar & Bağlamlar
                   </span>
-                  <span className="text-slate-400 font-mono">{academicContexts.length} kategori</span>
+                  <span className="text-slate-400 font-sans">{academicContexts.length} kategori</span>
                 </div>
 
                 <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
@@ -698,7 +639,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                           <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
                             {ctx}
                           </span>
-                          <span className="font-mono text-slate-400">
+                          <span className="font-sans text-slate-400">
                             {count} kelime (%{pct})
                           </span>
                         </div>
@@ -718,28 +659,31 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </section>
       )}
 
-      {/* SECTION 3: HAFTALIK ÇALIŞMA SÜRESİ SÜTUN GRAFİĞİ */}
-      {(activeChartTab === 'all' || activeChartTab === 'time') && (
+      {/* SECTION 3: HAFTALIK KELİME AKTİVİTESİ */}
+      {activeChartTab === 'time' && (
         <section className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/[0.08] shadow-xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <span className="p-1.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
-                  <Clock className="w-4 h-4" />
+                  <BarChart3 className="w-4 h-4" />
                 </span>
                 <h2 className="font-serif font-bold text-xl text-slate-900 dark:text-slate-100">
-                  Haftalık Çalışma Süresi & Günlük Aktivite Grafiği
+                  Haftalık Kelime Aktivitesi
                 </h2>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Son 7 gün boyunca çalışılan süreler (dakika) ve günlük 20 dakika hedefine göre tamamlama performansı.
+                Son 7 günde hangi gün yeni kelime eklediğinizi ve tekrar yaptığınızı karşılaştırın.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20">
-                Toplam {weeklyStudyStats.totalMinutesWeek} Dakika
-              </span>
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+              <button onClick={() => setWeeklyMetric('added')} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${weeklyMetric === 'added' ? 'bg-white dark:bg-slate-700 text-amber-600 shadow-sm' : 'text-slate-500'}`}>
+                Yeni kelimeler
+              </button>
+              <button onClick={() => setWeeklyMetric('reviewed')} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${weeklyMetric === 'reviewed' ? 'bg-white dark:bg-slate-700 text-sky-600 shadow-sm' : 'text-slate-500'}`}>
+                Tekrarlar
+              </button>
             </div>
           </div>
 
@@ -748,19 +692,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             {/* Chart Area */}
             <div className="relative h-44 sm:h-52 w-full flex items-end justify-between gap-2 sm:gap-4 pt-6 pb-2 px-1">
               
-              {/* Daily Target 20m Reference Line */}
-              <div 
-                className="absolute inset-x-0 border-b border-dashed border-sky-400/60 dark:border-sky-400/40 z-0 pointer-events-none flex items-center justify-end"
-                style={{ bottom: '48%' }}
-              >
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-sky-100/90 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 -translate-y-3 mr-2 shadow-2xs">
-                  20 dk Hedef Çizgisi
-                </span>
-              </div>
-
               {/* 7 Day Bars */}
-              {weeklyStudyStats.daysList.map((day) => {
-                const isTargetMet = day.minutes >= weeklyStudyStats.dailyTargetMinutes;
+              {weeklyActivityStats.daysList.map((day) => {
+                const count = weeklyMetric === 'added' ? day.addedCount : day.reviewCount;
                 return (
                   <div 
                     key={day.dateKey}
@@ -768,7 +702,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   >
                     {/* Hover Tooltip */}
                     <div className="opacity-0 group-hover:opacity-100 pointer-events-none absolute -top-8 px-2 py-1 rounded-md bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-mono whitespace-nowrap transition-all shadow-md z-30">
-                      {day.minutes} dk &bull; {day.reviewCount} kart
+                      {day.addedCount} yeni &bull; {day.reviewCount} tekrar
                     </div>
 
                     {/* Bar Pill */}
@@ -777,17 +711,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                         className={`w-full rounded-xl transition-all duration-500 flex flex-col justify-end p-1 ${
                           day.isToday
                             ? 'bg-gradient-to-t from-sky-600 to-amber-500 ring-2 ring-amber-400/40 ring-offset-2 ring-offset-white dark:ring-offset-slate-900'
-                            : isTargetMet
-                            ? 'bg-gradient-to-t from-sky-600 to-sky-400'
-                            : day.minutes > 0
-                            ? 'bg-sky-300 dark:bg-sky-800/80'
-                            : 'bg-slate-200 dark:bg-slate-700/60'
+                            : weeklyMetric === 'added'
+                            ? 'bg-gradient-to-t from-amber-500 to-orange-300'
+                            : 'bg-gradient-to-t from-sky-600 to-sky-400'
                         }`}
-                        style={{ height: `${day.heightPercentage}%` }}
+                        style={{ height: `${Math.max(4, Math.round((count / Math.max(1, ...weeklyActivityStats.daysList.map((item) => weeklyMetric === 'added' ? item.addedCount : item.reviewCount))) * 100))}%` }}
                       >
-                        {day.minutes > 0 && (
+                        {count > 0 && (
                           <span className="hidden sm:block text-[10px] font-mono font-bold text-center text-white truncate">
-                            {day.minutes}m
+                            {count}
                           </span>
                         )}
                       </div>
@@ -814,25 +746,25 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               <div>
                 <span className="text-slate-400">Günlük Ortalama:</span>
                 <p className="font-mono font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                  {weeklyStudyStats.averageDailyMinutes} dakika / gün
+                  {weeklyMetric === 'added' ? `${Math.round(weeklyActivityStats.totalAddedWeek / 7)} kelime / gün` : `${Math.round(weeklyActivityStats.totalReviewsWeek / 7)} tekrar / gün`}
                 </p>
               </div>
               <div>
                 <span className="text-slate-400">Hedefe Ulaşılan Gün:</span>
                 <p className="font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                  {weeklyStudyStats.targetAchievedDays} / 7 Gün
+                  {weeklyActivityStats.totalAddedWeek} yeni kelime
                 </p>
               </div>
               <div>
                 <span className="text-slate-400">En Verimli Gün:</span>
                 <p className="font-mono font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                  {weeklyStudyStats.peakDayName}
+                  {weeklyActivityStats.mostActiveDay?.dayLabel || '—'}
                 </p>
               </div>
               <div>
                 <span className="text-slate-400">Haftalık Tekrar Adedi:</span>
                 <p className="font-mono font-bold text-sky-600 dark:text-sky-400 mt-0.5">
-                  {weeklyStudyStats.totalReviewsWeek} kart tekrarlandı
+                  {weeklyActivityStats.totalReviewsWeek} kart tekrarlandı
                 </p>
               </div>
             </div>
@@ -848,10 +780,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               Son Tekrar Geçmişi Günlüğü
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Spaced repetition oturumlarında kaydedilen son 10 kart incelemesi ve FSRS aralık değişimleri.
+              Son 10 tekrar çalışmanız ve kelimelerin öğrenme durumundaki değişimler.
             </p>
           </div>
-          <span className="text-xs font-mono text-slate-400">
+          <span className="text-xs font-sans text-slate-400">
             {reviewLogs.length} toplam kayıt
           </span>
         </div>
@@ -872,7 +804,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   <th className="py-2.5 px-3">Tarih</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] font-mono">
+              <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] font-sans">
                 {recentLogs.map((log) => {
                   const dateFormatted = new Date(log.timestamp).toLocaleString('tr-TR', {
                     month: 'short',
@@ -883,7 +815,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
                   return (
                     <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition">
-                      <td className="py-3 px-3 font-serif font-bold text-sm text-slate-900 dark:text-slate-100">
+                      <td className="py-3 px-3 font-sans font-bold text-sm text-slate-900 dark:text-slate-100">
                         {log.wordText}
                       </td>
                       <td className="py-3 px-3">
@@ -898,10 +830,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                        {log.newIntervalDays} gün
+                        <span className="font-sans">{log.newIntervalDays} gün</span>
                       </td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                        {log.newDifficulty} / 10
+                        <span className="font-sans">{log.newDifficulty}</span> / 10
                       </td>
                       <td className="py-3 px-3 text-slate-400 text-[11px]">
                         {dateFormatted}

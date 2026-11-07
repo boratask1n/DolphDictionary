@@ -55,7 +55,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
           Akademik İstatistikler & Bellek Analitiği
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Spaced Repetition (FSRS) kararlılık eğrileri ve kelime öğrenme performansı.
+          Tekrar alışkanlığınız ve kelime öğrenme performansınız.
         </p>
       </div>
 

@@ -362,7 +362,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>Aşama 2: Supabase Senkronizasyon</span>
             </div>
             <p className="text-slate-500 text-[11px]">
-              PostgreSQL, Row Level Security (RLS) ve Supabase Auth entegrasyonu ile cihazlar arası bulut senkronizasyonu.
+              Kayıtlarınızı güvenli biçimde saklayarak cihazlarınız arasında güncel tutar.
             </p>
           </div>
 
@@ -372,7 +372,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>Aşama 7: Android (React Native / Expo)</span>
             </div>
             <p className="text-slate-500 text-[11px]">
-              Mevcut FSRS algoritması ve veri şeması doğrudan React Native çekirdeğine taşınacaktır.
+              Öğrenme verileriniz yeni uygulama sürümlerinde de korunacaktır.
             </p>
           </div>
 

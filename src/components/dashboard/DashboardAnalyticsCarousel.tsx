@@ -593,7 +593,7 @@ export const DashboardAnalyticsCarousel: React.FC<DashboardAnalyticsCarouselProp
                   {progressMetrics.mastered} / {progressMetrics.total} Kalıcı Sözcük
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  FSRS algoritması ile hesaplanan güncel bellek kararlılığı
+                  Kelimeleri ne kadar iyi hatırladığınızı gösteren güncel durum
                 </p>
               </div>
             </div>
@@ -657,9 +657,9 @@ export const DashboardAnalyticsCarousel: React.FC<DashboardAnalyticsCarouselProp
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
                   <div className="flex items-center gap-1.5">
                     <Award className="w-3.5 h-3.5 text-amber-500" />
-                    <span>CEFR Seviye Dağılımı</span>
+                    <span>Dil Seviyesi Dağılımı</span>
                   </div>
-                  <span className="text-[11px] text-slate-400 font-mono">B1 - C2</span>
+                  <span className="text-[11px] text-slate-400 font-mono">A1 - C2</span>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2 pt-1">

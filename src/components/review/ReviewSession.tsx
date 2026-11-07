@@ -203,7 +203,7 @@ export const ReviewSession: React.FC<ReviewSessionProps> = ({
               Tekrar Seansı Tamamlandı
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Bellek kararlılıkları FSRS algoritmasıyla yeniden hesaplandı ve veritabanına kaydedildi.
+              Öğrenme durumları yeniden hesaplandı ve kayıtlarınıza kaydedildi.
             </p>
           </div>
 

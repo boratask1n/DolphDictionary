@@ -1,0 +1,6 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "database": "ai-studio-lexilabszlkstick-244c896b-9f75-40b5-b54b-67d2c19c8015"
+  }
+}

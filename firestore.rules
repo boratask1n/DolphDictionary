@@ -61,6 +61,16 @@ service cloud.firestore {
         && data.feedback is string && data.feedback.size() <= 32;
     }
 
+    function isValidChat(data) {
+      return data.keys().hasAll(['id', 'userId', 'language', 'title', 'messages', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && (data.language == 'en' || data.language == 'de')
+        && data.title is string && data.title.size() <= 120
+        && data.messages is list && data.messages.size() <= 50
+        && data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
     // 6. User Profile Collection
     match /users/{userId} {
       allow get: if isOwner(userId);
@@ -80,8 +90,7 @@ service cloud.firestore {
           && isValidId(wordId)
           && isValidWord(incoming())
           && incoming().userId == existing().userId
-          && incoming().id == existing().id
-          && incoming().dateAdded == existing().dateAdded;
+          && incoming().id == existing().id;
         allow delete: if isOwner(userId) && isValidId(wordId);
       }
 
@@ -103,6 +112,17 @@ service cloud.firestore {
           && isValidId(settingId)
           && incoming().userId == request.auth.uid;
         allow delete: if isOwner(userId) && isValidId(settingId);
+      }
+
+      // 10. AI chat sessions, isolated by user and language
+      match /chatSessions/{chatId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(chatId)
+          && isValidChat(incoming())
+          && incoming().userId == request.auth.uid
+          && incoming().id == chatId;
+        allow delete: if isOwner(userId) && isValidId(chatId);
       }
     }
   }

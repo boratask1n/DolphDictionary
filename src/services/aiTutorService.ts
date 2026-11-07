@@ -8,6 +8,17 @@ export interface ChatMessage {
   contextWord?: string;
 }
 
+export interface ChatSession {
+  id: string;
+  language: LanguageCode;
+  title: string;
+  messages: ChatMessage[];
+  updatedAt: string;
+}
+
+export const MAX_ACTIVE_CHATS_PER_LANGUAGE = 3;
+export const MAX_CONTEXT_MESSAGES = 12;
+
 export interface WordExplanationResponse {
   success: boolean;
   word: string;
@@ -91,7 +102,7 @@ export async function sendChatMessageToAI(
 ): Promise<ChatResponse> {
   try {
     // Format history for server
-    const serverHistory = history.map((msg) => ({
+    const serverHistory = history.slice(-MAX_CONTEXT_MESSAGES).map((msg) => ({
       role: msg.role === 'model' ? 'model' : 'user',
       content: msg.content,
     }));
